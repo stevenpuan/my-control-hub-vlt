@@ -6,6 +6,7 @@ import {
   LogOut, ChevronDown, ChevronRight, Search, PanelLeftClose, PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 interface NavItem {
   label: string;
