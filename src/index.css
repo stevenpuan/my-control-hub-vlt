@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 220 20% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 15%;
+
+    --primary: 200 80% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 20% 15%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 200 80% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 200 80% 45%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 228 20% 15%;
+    --sidebar-foreground: 220 15% 75%;
+    --sidebar-primary: 200 80% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 228 20% 20%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 228 15% 22%;
+    --sidebar-ring: 200 80% 55%;
+    --sidebar-muted: 228 15% 35%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 38 92% 20%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --badge-ai: 270 60% 55%;
+    --badge-active: 142 71% 45%;
+    --badge-usage: 200 80% 45%;
+    --badge-sso: 38 92% 50%;
+    --badge-soc2: 340 65% 50%;
+    --badge-gdpr: 160 50% 40%;
+    --badge-iso: 220 60% 50%;
+    --badge-cloud: 200 70% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
