@@ -1,50 +1,90 @@
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const usageData = [
-  { service: "OpenAI", metric: "API 呼叫次數", current: "145,230", limit: "200,000", usage: 72.6 },
-  { service: "AWS S3", metric: "儲存容量", current: "2.3 TB", limit: "5 TB", usage: 46.0 },
-  { service: "AWS Lambda", metric: "執行次數", current: "890K", limit: "1M", usage: 89.0 },
-  { service: "Google Cloud", metric: "BigQuery 掃描", current: "12.5 TB", limit: "20 TB", usage: 62.5 },
-  { service: "Slack", metric: "訊息數", current: "23,450", limit: "無限", usage: 0 },
-  { service: "GitHub", metric: "Actions 分鐘", current: "2,800", limit: "3,000", usage: 93.3 },
-];
+interface UsageRow {
+  id: string;
+  service: string;
+  metric: string;
+  current_label: string;
+  limit_label: string;
+  usage_pct: number;
+  sort_order: number;
+}
 
 export default function UsagePage() {
+  const { data: rows = [], isLoading, error } = useQuery({
+    queryKey: ["usage_metrics"],
+    queryFn: async (): Promise<UsageRow[]> => {
+      const { data, error } = await (supabase as any)
+        .from("usage_metrics")
+        .select("*")
+        .order("sort_order");
+      if (error) throw error;
+      return (data ?? []) as UsageRow[];
+    },
+  });
+
+  if (error) toast.error("讀取用量資料失敗", { description: (error as Error).message });
+
+  const stats = useMemo(
+    () => ({
+      total: rows.length,
+      over80: rows.filter((r) => Number(r.usage_pct) > 80).length,
+      over90: rows.filter((r) => Number(r.usage_pct) > 90).length,
+    }),
+    [rows]
+  );
+
   return (
     <div className="space-y-6">
       <PageHeader breadcrumb={["用量監控"]} title="用量監控" description="即時監控各服務的用量與配額使用情況" />
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="監控服務" value={6} />
-        <StatCard label="超過 80%" value={2} />
-        <StatCard label="超過 90%" value={1} />
-        <StatCard label="本月異常" value={0} />
+        {isLoading
+          ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)
+          : [
+              <StatCard key="a" label="監控服務" value={stats.total} />,
+              <StatCard key="b" label="超過 80%" value={stats.over80} />,
+              <StatCard key="c" label="超過 90%" value={stats.over90} />,
+              <StatCard key="d" label="本月異常" value={0} />,
+            ]}
       </div>
 
       <div className="space-y-3">
-        {usageData.map((item) => (
-          <div key={item.service} className="bg-card border border-border rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <span className="font-medium text-card-foreground">{item.service}</span>
-                <span className="text-muted-foreground text-sm ml-2">— {item.metric}</span>
-              </div>
-              <span className="text-sm text-card-foreground">{item.current} / {item.limit}</span>
-            </div>
-            {item.usage > 0 ? (
-              <div className="w-full h-3 bg-muted rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    item.usage > 90 ? "bg-destructive" : item.usage > 80 ? "bg-warning" : "bg-primary"
-                  }`}
-                  style={{ width: `${item.usage}%` }}
-                />
-              </div>
-            ) : (
-              <div className="text-xs text-muted-foreground">無限制</div>
-            )}
-          </div>
-        ))}
+        {isLoading
+          ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)
+          : rows.map((item) => {
+              const pct = Number(item.usage_pct);
+              return (
+                <div key={item.id} className="bg-card border border-border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <span className="font-medium text-card-foreground">{item.service}</span>
+                      <span className="text-muted-foreground text-sm ml-2">— {item.metric}</span>
+                    </div>
+                    <span className="text-sm text-card-foreground">
+                      {item.current_label} / {item.limit_label}
+                    </span>
+                  </div>
+                  {pct > 0 ? (
+                    <div className="w-full h-3 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          pct > 90 ? "bg-destructive" : pct > 80 ? "bg-warning" : "bg-primary"
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">無限制</div>
+                  )}
+                </div>
+              );
+            })}
       </div>
     </div>
   );
