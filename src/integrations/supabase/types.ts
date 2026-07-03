@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      accounts: {
+        Row: {
+          account_name: string
+          created_at: string
+          created_by: string | null
+          followers_count: number
+          id: string
+          last_active: string | null
+          mfa_enabled: boolean
+          owner: string | null
+          platform: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          account_name: string
+          created_at?: string
+          created_by?: string | null
+          followers_count?: number
+          id?: string
+          last_active?: string | null
+          mfa_enabled?: boolean
+          owner?: string | null
+          platform: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          account_name?: string
+          created_at?: string
+          created_by?: string | null
+          followers_count?: number
+          id?: string
+          last_active?: string | null
+          mfa_enabled?: boolean
+          owner?: string | null
+          platform?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
