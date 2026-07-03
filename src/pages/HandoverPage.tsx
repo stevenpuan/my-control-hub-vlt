@@ -1,34 +1,82 @@
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import PageHeader from "@/components/PageHeader";
 import DataTable from "@/components/DataTable";
 import StatCard from "@/components/StatCard";
-import AppBadge from "@/components/AppBadge";
+import StatusBadge from "@/components/StatusBadge";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const handovers = [
-  { id: 1, account: "Facebook 粉專", from: "王小明", to: "張大衛", status: "進行中", startDate: "2026-04-01", items: "密碼、管理權限、廣告帳戶", progress: "2/4" },
-  { id: 2, account: "LinkedIn 頁面", from: "陳美玲", to: "林志偉", status: "已完成", startDate: "2026-03-15", items: "密碼、管理權限", progress: "3/3" },
-  { id: 3, account: "AWS Root", from: "劉工程", to: "吳技術", status: "待開始", startDate: "2026-04-10", items: "Root 帳號、MFA 裝置、IAM", progress: "0/5" },
-];
+interface HandoverRow {
+  id: string;
+  account: string;
+  from_person: string;
+  to_person: string;
+  status: string;
+  start_date: string;
+  items: string;
+  progress_done: number;
+  progress_total: number;
+}
 
 const columns = [
   { key: "account", label: "帳號/服務" },
-  { key: "from", label: "移交人" },
-  { key: "to", label: "接收人" },
-  { key: "status", label: "狀態", render: (r: any) => <AppBadge label={r.status === "已完成" ? "使用中" : r.status === "進行中" ? "SSO" : "AI / ML"} /> },
-  { key: "startDate", label: "開始日期" },
+  { key: "from_person", label: "移交人" },
+  { key: "to_person", label: "接收人" },
+  { key: "status", label: "狀態", render: (r: HandoverRow) => <StatusBadge label={r.status} /> },
+  { key: "start_date", label: "開始日期" },
   { key: "items", label: "交接項目" },
-  { key: "progress", label: "進度" },
+  {
+    key: "progress",
+    label: "進度",
+    render: (r: HandoverRow) => (
+      <span>{r.progress_done}/{r.progress_total}</span>
+    ),
+  },
 ];
 
 export default function HandoverPage() {
+  const { data: handovers = [], isLoading, error } = useQuery({
+    queryKey: ["handovers"],
+    queryFn: async (): Promise<HandoverRow[]> => {
+      const { data, error } = await (supabase as any)
+        .from("handovers")
+        .select("*")
+        .order("start_date", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as HandoverRow[];
+    },
+  });
+
+  if (error) toast.error("讀取交接資料失敗", { description: (error as Error).message });
+
+  const stats = useMemo(
+    () => ({
+      inProgress: handovers.filter((h) => h.status === "進行中").length,
+      done: handovers.filter((h) => h.status === "已完成").length,
+      pending: handovers.filter((h) => h.status === "待開始").length,
+    }),
+    [handovers]
+  );
+
   return (
     <div className="space-y-6">
-      <PageHeader breadcrumb={["社群帳號管理", "交接管理"]} title="交接管理" description="追蹤帳號與服務的交接流程與進度" />
+      <PageHeader
+        breadcrumb={["社群帳號管理", "交接管理"]}
+        title="交接管理"
+        description="追蹤帳號與服務的交接流程與進度"
+      />
       <div className="grid grid-cols-3 gap-4">
-        <StatCard label="進行中" value={1} />
-        <StatCard label="已完成" value={1} />
-        <StatCard label="待開始" value={1} />
+        {isLoading
+          ? Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)
+          : [
+              <StatCard key="a" label="進行中" value={stats.inProgress} />,
+              <StatCard key="b" label="已完成" value={stats.done} />,
+              <StatCard key="c" label="待開始" value={stats.pending} />,
+            ]}
       </div>
-      <DataTable columns={columns} data={handovers} />
+      {isLoading ? <Skeleton className="h-64 rounded-lg" /> : <DataTable columns={columns} data={handovers} />}
     </div>
   );
 }

@@ -1,43 +1,93 @@
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import PageHeader from "@/components/PageHeader";
 import DataTable from "@/components/DataTable";
 import StatCard from "@/components/StatCard";
 import StatusBadge from "@/components/StatusBadge";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const licenses = [
-  { id: 1, app: "OpenAI", type: "API Key", total: 15, used: 12, assignee: "AI 團隊", expiry: "2027-01-01" },
-  { id: 2, app: "Slack", type: "使用者授權", total: 100, used: 87, assignee: "全公司", expiry: "2026-09-15" },
-  { id: 3, app: "Figma", type: "使用者授權", total: 30, used: 28, assignee: "設計部", expiry: "2026-12-01" },
-  { id: 4, app: "GitHub", type: "使用者授權", total: 50, used: 45, assignee: "工程部", expiry: "2027-03-01" },
-  { id: 5, app: "Notion", type: "使用者授權", total: 80, used: 72, assignee: "全公司", expiry: "2026-11-01" },
-  { id: 6, app: "Adobe CC", type: "裝置授權", total: 10, used: 3, assignee: "行銷部", expiry: "2026-06-30" },
-];
+interface LicenseRow {
+  id: string;
+  app: string;
+  license_type: string;
+  total_seats: number;
+  used_seats: number;
+  assignee: string;
+  expiry: string;
+}
 
 const columns = [
   { key: "app", label: "應用名稱" },
-  { key: "type", label: "授權類型" },
-  { key: "total", label: "總授權數" },
-  { key: "used", label: "已使用", render: (r: any) => <span>{r.used}/{r.total}</span> },
+  { key: "license_type", label: "授權類型" },
+  { key: "total_seats", label: "總授權數" },
+  {
+    key: "used_seats",
+    label: "已使用",
+    render: (r: LicenseRow) => <span>{r.used_seats}/{r.total_seats}</span>,
+  },
   { key: "assignee", label: "指派對象" },
   { key: "expiry", label: "到期日" },
-  { key: "status", label: "狀態", render: (r: any) => {
-    const ratio = r.used / r.total;
-    if (ratio < 0.5) return <StatusBadge label="低使用率" />;
-    if (ratio >= 0.9) return <StatusBadge label="即將額滿" variant="warning" />;
-    return <StatusBadge label="使用中" />;
-  }},
+  {
+    key: "status",
+    label: "狀態",
+    render: (r: LicenseRow) => {
+      const ratio = r.total_seats ? r.used_seats / r.total_seats : 0;
+      if (ratio >= 0.9) return <StatusBadge label="即將額滿" variant="warning" />;
+      if (ratio < 0.5) return <StatusBadge label="低使用率" />;
+      return <StatusBadge label="使用中" />;
+    },
+  },
 ];
 
 export default function LicensesPage() {
+  const { data: licenses = [], isLoading, error } = useQuery({
+    queryKey: ["licenses"],
+    queryFn: async (): Promise<LicenseRow[]> => {
+      const { data, error } = await (supabase as any).from("licenses").select("*").order("app");
+      if (error) throw error;
+      return (data ?? []) as LicenseRow[];
+    },
+  });
+
+  if (error) toast.error("讀取授權資料失敗", { description: (error as Error).message });
+
+  const stats = useMemo(() => {
+    const totalSeats = licenses.reduce((s, r) => s + (r.total_seats ?? 0), 0);
+    const usedSeats = licenses.reduce((s, r) => s + (r.used_seats ?? 0), 0);
+    const rate = totalSeats ? ((usedSeats / totalSeats) * 100).toFixed(1) + "%" : "0.0%";
+    const now = Date.now();
+    const in90 = now + 90 * 86400000;
+    const expiring = licenses.filter((r) => {
+      const t = new Date(r.expiry).getTime();
+      return t >= now && t <= in90;
+    }).length;
+    return { totalSeats, usedSeats, rate, expiring };
+  }, [licenses]);
+
   return (
     <div className="space-y-6">
-      <PageHeader breadcrumb={["SaaS 應用管理", "授權管理"]} title="授權管理" description="追蹤所有 SaaS 應用的授權「席次（seats）」分配狀況（與應用數不同）" />
+      <PageHeader
+        breadcrumb={["SaaS 應用管理", "授權管理"]}
+        title="授權管理"
+        description="追蹤所有 SaaS 應用的授權「席次（seats）」分配狀況"
+      />
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="總授權席次" value={285} />
-        <StatCard label="已分配席次" value={247} />
-        <StatCard label="使用率" value="86.7%" />
-        <StatCard label="即將到期" value={2} />
+        {isLoading
+          ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)
+          : [
+              <StatCard key="a" label="總授權席次" value={stats.totalSeats} />,
+              <StatCard key="b" label="已分配席次" value={stats.usedSeats} />,
+              <StatCard key="c" label="使用率" value={stats.rate} />,
+              <StatCard key="d" label="即將到期" value={stats.expiring} />,
+            ]}
       </div>
-      <DataTable columns={columns} data={licenses} />
+      {isLoading ? (
+        <Skeleton className="h-64 rounded-lg" />
+      ) : (
+        <DataTable columns={columns} data={licenses} />
+      )}
     </div>
   );
 }
