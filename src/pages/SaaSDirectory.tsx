@@ -1,14 +1,27 @@
 import { useState, useMemo } from "react";
 import { Search, Filter, Plus } from "lucide-react";
-import { saasApps, expiringApps, stats } from "@/data/saasApps";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import StatCard from "@/components/StatCard";
 import SaaSAppCard from "@/components/SaaSAppCard";
 import ExpiryAlert from "@/components/ExpiryAlert";
 import PageHeader from "@/components/PageHeader";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { SaaSApp } from "@/data/saasApps";
 
 const categories = ["全部類別", "AI / ML", "雲端服務", "協作工具", "設計工具", "開發工具", "人力資源"];
 const statuses = ["全部狀態", "使用中", "試用中", "已停用"];
 const compliances = ["全部合規", "SOC 2", "ISO 27001", "GDPR", "SSO"];
+
+const iconBgByCategory: Record<string, string> = {
+  "AI / ML": "bg-badge-ai/15",
+  "雲端服務": "bg-badge-cloud/15",
+  "協作工具": "bg-badge-sso/15",
+  "設計工具": "bg-badge-soc2/15",
+  "開發工具": "bg-badge-iso/15",
+  "人力資源": "bg-badge-gdpr/15",
+};
 
 export default function SaaSDirectory() {
   const [search, setSearch] = useState("");
@@ -16,15 +29,56 @@ export default function SaaSDirectory() {
   const [status, setStatus] = useState("全部狀態");
   const [compliance, setCompliance] = useState("全部合規");
 
+  const { data: apps = [], isLoading, error } = useQuery({
+    queryKey: ["saas_apps"],
+    queryFn: async (): Promise<SaaSApp[]> => {
+      const { data, error } = await supabase.from("saas_apps").select("*").order("name");
+      if (error) throw error;
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        name: row.name,
+        vendor: row.vendor ?? "",
+        category: row.category ?? "",
+        description: row.description ?? "",
+        badges: row.badges ?? [],
+        monthlyCost: Number(row.monthly_cost ?? 0),
+        contractEnd: row.contract_end ?? undefined,
+        icon: row.icon ?? "📦",
+        iconBg: iconBgByCategory[row.category ?? ""] ?? "bg-muted",
+      }));
+    },
+  });
+
+  if (error) {
+    toast.error("讀取 SaaS 應用失敗", { description: (error as Error).message });
+  }
+
   const filtered = useMemo(() => {
-    return saasApps.filter((app) => {
+    return apps.filter((app) => {
       if (search && !app.name.toLowerCase().includes(search.toLowerCase()) && !app.vendor.toLowerCase().includes(search.toLowerCase())) return false;
       if (category !== "全部類別" && !app.badges.includes(category)) return false;
       if (status !== "全部狀態" && !app.badges.includes(status)) return false;
       if (compliance !== "全部合規" && !app.badges.includes(compliance)) return false;
       return true;
     });
-  }, [search, category, status, compliance]);
+  }, [apps, search, category, status, compliance]);
+
+  const stats = useMemo(() => ({
+    totalApps: apps.length,
+    totalMonthlyCost: apps.reduce((sum, a) => sum + a.monthlyCost, 0),
+    ssoEnabled: apps.filter((a) => a.badges.includes("SSO")).length,
+    trial: apps.filter((a) => a.badges.includes("試用中")).length,
+  }), [apps]);
+
+  const expiringApps = useMemo(() => {
+    const now = Date.now();
+    const in30 = 30 * 24 * 60 * 60 * 1000;
+    return apps.filter((a) => {
+      if (!a.contractEnd) return false;
+      const diff = new Date(a.contractEnd).getTime() - now;
+      return diff > 0 && diff < in30;
+    });
+  }, [apps]);
 
   return (
     <div className="space-y-6">
@@ -40,13 +94,19 @@ export default function SaaSDirectory() {
       />
 
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="應用總數" value={stats.totalApps} />
-        <StatCard label="月費用合計" value={`$${stats.totalMonthlyCost.toLocaleString()}`} />
-        <StatCard label="啟用 SSO" value={stats.ssoEnabled} />
-        <StatCard label="試用中" value={stats.trial} />
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)
+        ) : (
+          <>
+            <StatCard label="應用總數" value={stats.totalApps} />
+            <StatCard label="月費用合計" value={`$${stats.totalMonthlyCost.toLocaleString()}`} />
+            <StatCard label="啟用 SSO" value={stats.ssoEnabled} />
+            <StatCard label="試用中" value={stats.trial} />
+          </>
+        )}
       </div>
 
-      <ExpiryAlert apps={expiringApps} />
+      {!isLoading && <ExpiryAlert apps={expiringApps} />}
 
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-md">
@@ -68,9 +128,15 @@ export default function SaaSDirectory() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-8">
-        {filtered.map((app) => <SaaSAppCard key={app.id} app={app} />)}
-        {filtered.length === 0 && (
-          <div className="col-span-3 text-center py-12 text-muted-foreground">沒有找到符合條件的應用</div>
+        {isLoading ? (
+          Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-lg" />)
+        ) : (
+          <>
+            {filtered.map((app) => <SaaSAppCard key={app.id} app={app} />)}
+            {filtered.length === 0 && (
+              <div className="col-span-3 text-center py-12 text-muted-foreground">沒有找到符合條件的應用</div>
+            )}
+          </>
         )}
       </div>
     </div>
