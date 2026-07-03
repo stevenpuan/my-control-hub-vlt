@@ -64,6 +64,7 @@ export default function AppSidebar({
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { signOut } = useAuth();
   const currentPath = location.pathname;
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
