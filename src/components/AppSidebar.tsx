@@ -191,6 +191,10 @@ export default function AppSidebar({
           {!collapsed && <span className="ml-3">個人設定</span>}
         </button>
         <button
+          onClick={async () => {
+            await signOut();
+            navigate("/auth", { replace: true });
+          }}
           className={cn(
             "flex items-center w-full px-4 py-2 text-sm hover:bg-sidebar-accent",
             collapsed && "justify-center px-0"
