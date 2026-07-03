@@ -6,6 +6,7 @@ import {
   LogOut, ChevronDown, ChevronRight, Search, PanelLeftClose, PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 interface NavItem {
   label: string;
@@ -63,6 +64,7 @@ export default function AppSidebar({
 }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { signOut } = useAuth();
   const currentPath = location.pathname;
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
@@ -189,6 +191,10 @@ export default function AppSidebar({
           {!collapsed && <span className="ml-3">個人設定</span>}
         </button>
         <button
+          onClick={async () => {
+            await signOut();
+            navigate("/auth", { replace: true });
+          }}
           className={cn(
             "flex items-center w-full px-4 py-2 text-sm hover:bg-sidebar-accent",
             collapsed && "justify-center px-0"

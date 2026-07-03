@@ -14,7 +14,108 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      audit_log: {
+        Row: {
+          action: string
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: number
+          metadata: Json | null
+          owner_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: never
+          metadata?: Json | null
+          owner_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: never
+          metadata?: Json | null
+          owner_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      saas_apps: {
+        Row: {
+          badges: string[]
+          category: string | null
+          contract_end: string | null
+          created_at: string
+          created_by: string | null
+          currency: string
+          description: string | null
+          icon: string | null
+          id: string
+          monthly_cost: number
+          name: string
+          updated_at: string
+          vendor: string | null
+        }
+        Insert: {
+          badges?: string[]
+          category?: string | null
+          contract_end?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          monthly_cost?: number
+          name: string
+          updated_at?: string
+          vendor?: string | null
+        }
+        Update: {
+          badges?: string[]
+          category?: string | null
+          contract_end?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          monthly_cost?: number
+          name?: string
+          updated_at?: string
+          vendor?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
