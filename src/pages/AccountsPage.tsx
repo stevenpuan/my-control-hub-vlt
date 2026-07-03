@@ -1,40 +1,139 @@
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import PageHeader from "@/components/PageHeader";
 import DataTable from "@/components/DataTable";
 import StatCard from "@/components/StatCard";
 import AppBadge from "@/components/AppBadge";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const accounts = [
-  { id: 1, platform: "Facebook", accountName: "公司官方粉專", owner: "行銷部 - 王小明", followers: "12.5K", status: "使用中", lastActive: "2026-04-05", mfa: "已啟用" },
-  { id: 2, platform: "Instagram", accountName: "品牌帳號", owner: "行銷部 - 李小華", followers: "8.3K", status: "使用中", lastActive: "2026-04-06", mfa: "已啟用" },
-  { id: 3, platform: "X (Twitter)", accountName: "@company_official", owner: "公關部 - 張大衛", followers: "5.1K", status: "使用中", lastActive: "2026-04-04", mfa: "未啟用" },
-  { id: 4, platform: "LinkedIn", accountName: "公司企業頁面", owner: "HR 部 - 陳美玲", followers: "3.2K", status: "使用中", lastActive: "2026-04-03", mfa: "已啟用" },
-  { id: 5, platform: "YouTube", accountName: "官方頻道", owner: "行銷部 - 王小明", followers: "2.1K", status: "使用中", lastActive: "2026-03-28", mfa: "已啟用" },
-  { id: 6, platform: "TikTok", accountName: "品牌短影音", owner: "行銷部 - 林志偉", followers: "950", status: "試用中", lastActive: "2026-04-01", mfa: "未啟用" },
-];
+interface AccountRow {
+  id: string;
+  platform: string;
+  account_name: string;
+  owner: string;
+  followers_count: number;
+  status: string;
+  last_active: string | null;
+  mfa_enabled: boolean;
+}
+
+function formatFollowers(count: number): string {
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}K`;
+  }
+  return String(count);
+}
 
 const columns = [
   { key: "platform", label: "平台" },
-  { key: "accountName", label: "帳號名稱" },
+  { key: "account_name", label: "帳號名稱" },
   { key: "owner", label: "負責人" },
-  { key: "followers", label: "追蹤數" },
-  { key: "status", label: "狀態", render: (r: any) => <AppBadge label={r.status} /> },
-  { key: "lastActive", label: "最後活動" },
-  { key: "mfa", label: "MFA", render: (r: any) => (
-    <span className={r.mfa === "已啟用" ? "text-badge-active" : "text-destructive"}>{r.mfa}</span>
-  )},
+  {
+    key: "followers_count",
+    label: "追蹤數",
+    render: (r: AccountRow) => formatFollowers(r.followers_count),
+  },
+  {
+    key: "status",
+    label: "狀態",
+    render: (r: AccountRow) => <AppBadge label={r.status} />,
+  },
+  { key: "last_active", label: "最後活動" },
+  {
+    key: "mfa_enabled",
+    label: "MFA",
+    render: (r: AccountRow) => (
+      <span className={r.mfa_enabled ? "text-badge-active" : "text-destructive"}>
+        {r.mfa_enabled ? "已啟用" : "未啟用"}
+      </span>
+    ),
+  },
 ];
 
 export default function AccountsPage() {
+  const { data: accounts = [], isLoading, error } = useQuery({
+    queryKey: ["accounts"],
+    queryFn: async (): Promise<AccountRow[]> => {
+      const { data, error } = await (supabase as any)
+        .from("accounts")
+        .select("*")
+        .order("followers_count", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as AccountRow[];
+    },
+  });
+
+  if (error) {
+    toast.error("讀取帳號資料失敗", { description: (error as Error).message });
+  }
+
+  const stats = useMemo(() => {
+    const total = accounts.length;
+    const active = accounts.filter((a) => a.status === "使用中").length;
+    const mfaRate =
+      total > 0
+        ? ((accounts.filter((a) => a.mfa_enabled).length / total) * 100).toFixed(1) + "%"
+        : "0.0%";
+    const needsAttention = accounts.filter((a) => !a.mfa_enabled).length;
+    return { total, active, mfaRate, needsAttention };
+  }, [accounts]);
+
   return (
     <div className="space-y-6">
-      <PageHeader breadcrumb={["社群帳號管理", "帳號列表"]} title="帳號列表" description="管理所有社群媒體帳號與存取權限" />
+      <PageHeader
+        breadcrumb={["社群帳號管理", "帳號列表"]}
+        title="帳號列表"
+        description="管理所有社群媒體帳號與存取權限"
+      />
+
       <div className="grid grid-cols-4 gap-4">
-        <StatCard label="帳號總數" value={6} />
-        <StatCard label="使用中" value={5} />
-        <StatCard label="MFA 啟用率" value="66.7%" />
-        <StatCard label="需要關注" value={2} />
+        {isLoading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 rounded-lg" />
+            ))
+          : [
+              <StatCard key="total" label="帳號總數" value={stats.total} />,
+              <StatCard key="active" label="使用中" value={stats.active} />,
+              <StatCard key="mfa" label="MFA 啟用率" value={stats.mfaRate} />,
+              <StatCard key="attention" label="需要關注" value={stats.needsAttention} />,
+            ]}
       </div>
-      <DataTable columns={columns} data={accounts} />
+
+      {isLoading ? (
+        <div className="border border-border rounded-lg overflow-hidden">
+          <div className="bg-muted/50 border-b border-border px-4 py-3">
+            <div className="flex gap-4">
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-14" />
+              <Skeleton className="h-4 w-14" />
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-4 w-14" />
+            </div>
+          </div>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div
+              key={i}
+              className="border-b border-border last:border-0 px-4 py-3"
+            >
+              <div className="flex gap-4 items-center">
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-12" />
+                <Skeleton className="h-4 w-14" />
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-4 w-14" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <DataTable columns={columns} data={accounts} />
+      )}
     </div>
   );
 }
