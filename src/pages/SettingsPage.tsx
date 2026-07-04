@@ -1,9 +1,12 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Pencil } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import PageHeader from "@/components/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import CrudDialog, { type CrudField } from "@/components/CrudDialog";
 
 interface SettingRow {
   id: string;
@@ -15,18 +18,17 @@ interface SettingRow {
 }
 
 export default function SettingsPage() {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<SettingRow | null>(null);
+
   const { data: rows = [], isLoading, error } = useQuery({
     queryKey: ["app_settings"],
     queryFn: async (): Promise<SettingRow[]> => {
-      const { data, error } = await (supabase as any)
-        .from("app_settings")
-        .select("*")
-        .order("sort_order");
+      const { data, error } = await (supabase as any).from("app_settings").select("*").order("sort_order");
       if (error) throw error;
       return (data ?? []) as SettingRow[];
     },
   });
-
   if (error) toast.error("讀取設定失敗", { description: (error as Error).message });
 
   const sections = useMemo(() => {
@@ -38,14 +40,30 @@ export default function SettingsPage() {
     return Array.from(map.entries());
   }, [rows]);
 
+  const editFields: CrudField[] = editing
+    ? [{ name: "value", label: editing.label, type: (editing.value_type as any) || "text" }]
+    : [];
+
+  const handleSubmit = async (values: Record<string, any>) => {
+    if (!editing) return;
+    try {
+      const { error } = await (supabase as any)
+        .from("app_settings").update({ value: String(values.value ?? "") }).eq("id", editing.id);
+      if (error) throw error;
+      toast.success("已更新");
+      queryClient.invalidateQueries({ queryKey: ["app_settings"] });
+      setEditing(null);
+    } catch (e) {
+      toast.error("設定更新失敗", { description: (e as Error).message });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader breadcrumb={["系統設定"]} title="系統設定" description="管理系統層級的全域配置與偏好設定" />
       {isLoading ? (
         <div className="space-y-6">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-48 rounded-lg" />
-          ))}
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-lg" />)}
         </div>
       ) : (
         <div className="space-y-6">
@@ -58,9 +76,12 @@ export default function SettingsPage() {
                 {items.map((item) => (
                   <div key={item.id} className="px-5 py-3 flex items-center justify-between">
                     <span className="text-sm text-card-foreground">{item.label}</span>
-                    <span className="text-sm text-muted-foreground bg-muted px-3 py-1 rounded">
-                      {item.value}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground bg-muted px-3 py-1 rounded">{item.value}</span>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditing(item)} aria-label="編輯">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -68,6 +89,16 @@ export default function SettingsPage() {
           ))}
         </div>
       )}
+
+      <CrudDialog
+        open={!!editing}
+        onOpenChange={(o) => !o && setEditing(null)}
+        mode="edit"
+        title={editing ? `編輯：${editing.label}` : "編輯"}
+        fields={editFields}
+        defaultValues={editing ? { value: editing.value } : undefined}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 }

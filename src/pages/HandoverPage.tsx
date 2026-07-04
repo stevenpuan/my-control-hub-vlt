@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import PageHeader from "@/components/PageHeader";
@@ -7,6 +8,9 @@ import DataTable from "@/components/DataTable";
 import StatCard from "@/components/StatCard";
 import StatusBadge from "@/components/StatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import CrudDialog, { type CrudField } from "@/components/CrudDialog";
+import { useCrud } from "@/hooks/useCrud";
 
 interface HandoverRow {
   id: string;
@@ -20,45 +24,49 @@ interface HandoverRow {
   progress_total: number;
 }
 
-const columns = [
-  { key: "account", label: "帳號/服務" },
-  { key: "from_person", label: "移交人" },
-  { key: "to_person", label: "接收人" },
-  { key: "status", label: "狀態", render: (r: HandoverRow) => <StatusBadge label={r.status} /> },
-  { key: "start_date", label: "開始日期" },
-  { key: "items", label: "交接項目" },
+const fields: CrudField[] = [
+  { name: "account", label: "帳號/服務", type: "text", required: true },
+  { name: "from_person", label: "移交人", type: "text" },
+  { name: "to_person", label: "接收人", type: "text" },
   {
-    key: "progress",
-    label: "進度",
-    render: (r: HandoverRow) => (
-      <span>{r.progress_done}/{r.progress_total}</span>
-    ),
+    name: "status", label: "狀態", type: "select",
+    options: ["待開始", "進行中", "已完成"].map((v) => ({ label: v, value: v })),
   },
+  { name: "start_date", label: "開始日期", type: "date" },
+  { name: "items", label: "交接項目", type: "textarea" },
+  { name: "progress_done", label: "已完成項", type: "number" },
+  { name: "progress_total", label: "總項數", type: "number" },
 ];
 
 export default function HandoverPage() {
+  const crud = useCrud<HandoverRow>({ table: "handovers", queryKey: "handovers", labelName: "交接" });
+
   const { data: handovers = [], isLoading, error } = useQuery({
     queryKey: ["handovers"],
     queryFn: async (): Promise<HandoverRow[]> => {
       const { data, error } = await (supabase as any)
-        .from("handovers")
-        .select("*")
-        .order("start_date", { ascending: false });
+        .from("handovers").select("*").order("start_date", { ascending: false });
       if (error) throw error;
       return (data ?? []) as HandoverRow[];
     },
   });
-
   if (error) toast.error("讀取交接資料失敗", { description: (error as Error).message });
 
-  const stats = useMemo(
-    () => ({
-      inProgress: handovers.filter((h) => h.status === "進行中").length,
-      done: handovers.filter((h) => h.status === "已完成").length,
-      pending: handovers.filter((h) => h.status === "待開始").length,
-    }),
-    [handovers]
-  );
+  const stats = useMemo(() => ({
+    inProgress: handovers.filter((h) => h.status === "進行中").length,
+    done: handovers.filter((h) => h.status === "已完成").length,
+    pending: handovers.filter((h) => h.status === "待開始").length,
+  }), [handovers]);
+
+  const columns = [
+    { key: "account", label: "帳號/服務" },
+    { key: "from_person", label: "移交人" },
+    { key: "to_person", label: "接收人" },
+    { key: "status", label: "狀態", render: (r: HandoverRow) => <StatusBadge label={r.status} /> },
+    { key: "start_date", label: "開始日期" },
+    { key: "items", label: "交接項目" },
+    { key: "progress", label: "進度", render: (r: HandoverRow) => <span>{r.progress_done}/{r.progress_total}</span> },
+  ];
 
   return (
     <div className="space-y-6">
@@ -66,6 +74,7 @@ export default function HandoverPage() {
         breadcrumb={["社群帳號管理", "交接管理"]}
         title="交接管理"
         description="追蹤帳號與服務的交接流程與進度"
+        actions={<Button onClick={crud.openCreate}><Plus className="h-4 w-4" />新增</Button>}
       />
       <div className="grid grid-cols-3 gap-4">
         {isLoading
@@ -76,7 +85,20 @@ export default function HandoverPage() {
               <StatCard key="c" label="待開始" value={stats.pending} />,
             ]}
       </div>
-      {isLoading ? <Skeleton className="h-64 rounded-lg" /> : <DataTable columns={columns} data={handovers} />}
+      {isLoading ? (
+        <Skeleton className="h-64 rounded-lg" />
+      ) : (
+        <DataTable columns={columns} data={handovers} onEdit={crud.openEdit} onDelete={crud.remove} />
+      )}
+      <CrudDialog
+        open={crud.dialogOpen}
+        onOpenChange={crud.setDialogOpen}
+        mode={crud.editing ? "edit" : "create"}
+        title={crud.editing ? "編輯交接" : "新增交接"}
+        fields={fields}
+        defaultValues={crud.editing ?? undefined}
+        onSubmit={(v) => crud.submit(v, (p) => ({ ...p, start_date: p.start_date || null }))}
+      />
     </div>
   );
 }
