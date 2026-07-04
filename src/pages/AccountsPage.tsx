@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import AppBadge from "@/components/AppBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import CrudDialog, { type CrudField } from "@/components/CrudDialog";
+import { useCrud } from "@/hooks/useCrud";
 
 interface AccountRow {
   id: string;
@@ -22,11 +23,6 @@ interface AccountRow {
   mfa_enabled: boolean;
 }
 
-function formatFollowers(count: number): string {
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
-  return String(count);
-}
-
 const fields: CrudField[] = [
   { name: "platform", label: "平台", type: "text", required: true },
   { name: "account_name", label: "帳號名稱", type: "text", required: true },
@@ -36,100 +32,43 @@ const fields: CrudField[] = [
     name: "status",
     label: "狀態",
     type: "select",
-    required: true,
     options: [
       { label: "使用中", value: "使用中" },
-      { label: "停用", value: "停用" },
-      { label: "審核中", value: "審核中" },
+      { label: "試用中", value: "試用中" },
     ],
   },
   { name: "last_active", label: "最後活動", type: "date" },
-  { name: "mfa_enabled", label: "MFA 啟用", type: "switch" },
+  { name: "mfa_enabled", label: "MFA", type: "switch" },
 ];
 
+const formatFollowers = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(n));
+
 export default function AccountsPage() {
-  const queryClient = useQueryClient();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<AccountRow | null>(null);
+  const crud = useCrud<AccountRow>({ table: "accounts", queryKey: "accounts", labelName: "帳號" });
 
   const { data: accounts = [], isLoading, error } = useQuery({
     queryKey: ["accounts"],
     queryFn: async (): Promise<AccountRow[]> => {
       const { data, error } = await (supabase as any)
-        .from("accounts")
-        .select("*")
-        .order("followers_count", { ascending: false });
+        .from("accounts").select("*").order("followers_count", { ascending: false });
       if (error) throw error;
       return (data ?? []) as AccountRow[];
     },
   });
-
-  if (error) {
-    toast.error("讀取帳號資料失敗", { description: (error as Error).message });
-  }
+  if (error) toast.error("讀取帳號資料失敗", { description: (error as Error).message });
 
   const stats = useMemo(() => {
     const total = accounts.length;
     const active = accounts.filter((a) => a.status === "使用中").length;
-    const mfaRate =
-      total > 0
-        ? ((accounts.filter((a) => a.mfa_enabled).length / total) * 100).toFixed(1) + "%"
-        : "0.0%";
-    const needsAttention = accounts.filter((a) => !a.mfa_enabled).length;
-    return { total, active, mfaRate, needsAttention };
+    const mfaRate = total ? ((accounts.filter((a) => a.mfa_enabled).length / total) * 100).toFixed(1) + "%" : "0.0%";
+    return { total, active, mfaRate, needsAttention: accounts.filter((a) => !a.mfa_enabled).length };
   }, [accounts]);
-
-  const openCreate = () => {
-    setEditing(null);
-    setDialogOpen(true);
-  };
-  const openEdit = (row: AccountRow) => {
-    setEditing(row);
-    setDialogOpen(true);
-  };
-
-  const handleSubmit = async (values: any) => {
-    const payload = { ...values };
-    if (payload.last_active === "") payload.last_active = null;
-    try {
-      if (editing) {
-        const { error } = await (supabase as any)
-          .from("accounts")
-          .update(payload)
-          .eq("id", editing.id);
-        if (error) throw error;
-        toast.success("已更新");
-      } else {
-        const { error } = await (supabase as any).from("accounts").insert(payload);
-        if (error) throw error;
-        toast.success("新增成功");
-      }
-      queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      setDialogOpen(false);
-    } catch (e) {
-      toast.error("操作失敗", { description: (e as Error).message });
-    }
-  };
-
-  const handleDelete = async (row: AccountRow) => {
-    const { error } = await (supabase as any).from("accounts").delete().eq("id", row.id);
-    if (error) {
-      toast.error("刪除失敗", { description: error.message });
-      return;
-    }
-    toast.success("已刪除");
-    queryClient.invalidateQueries({ queryKey: ["accounts"] });
-  };
 
   const columns = [
     { key: "platform", label: "平台" },
     { key: "account_name", label: "帳號名稱" },
     { key: "owner", label: "負責人" },
-    {
-      key: "followers_count",
-      label: "追蹤數",
-      render: (r: AccountRow) => formatFollowers(r.followers_count),
-    },
+    { key: "followers_count", label: "追蹤數", render: (r: AccountRow) => formatFollowers(r.followers_count) },
     { key: "status", label: "狀態", render: (r: AccountRow) => <AppBadge label={r.status} /> },
     { key: "last_active", label: "最後活動" },
     {
@@ -149,14 +88,8 @@ export default function AccountsPage() {
         breadcrumb={["社群帳號管理", "帳號列表"]}
         title="帳號列表"
         description="管理所有社群媒體帳號與存取權限"
-        actions={
-          <Button onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            新增
-          </Button>
-        }
+        actions={<Button onClick={crud.openCreate}><Plus className="h-4 w-4" />新增</Button>}
       />
-
       <div className="grid grid-cols-4 gap-4">
         {isLoading
           ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)
@@ -167,21 +100,19 @@ export default function AccountsPage() {
               <StatCard key="attention" label="需要關注" value={stats.needsAttention} />,
             ]}
       </div>
-
       {isLoading ? (
         <Skeleton className="h-64 rounded-lg" />
       ) : (
-        <DataTable columns={columns} data={accounts} onEdit={openEdit} onDelete={handleDelete} />
+        <DataTable columns={columns} data={accounts} onEdit={crud.openEdit} onDelete={crud.remove} />
       )}
-
       <CrudDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        mode={editing ? "edit" : "create"}
-        title={editing ? "編輯帳號" : "新增帳號"}
+        open={crud.dialogOpen}
+        onOpenChange={crud.setDialogOpen}
+        mode={crud.editing ? "edit" : "create"}
+        title={crud.editing ? "編輯帳號" : "新增帳號"}
         fields={fields}
-        defaultValues={editing ?? undefined}
-        onSubmit={handleSubmit}
+        defaultValues={crud.editing ?? undefined}
+        onSubmit={(v) => crud.submit(v, (p) => ({ ...p, last_active: p.last_active || null }))}
       />
     </div>
   );
